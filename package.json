@@ -1,0 +1,27 @@
+{
+  "name": "asin-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node .",
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/daniel-cardone/asin-bot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/daniel-cardone/asin-bot/issues"
+  },
+  "homepage": "https://github.com/daniel-cardone/asin-bot#readme",
+  "dependencies": {
+    "discord.js": "^14.5.0",
+    "dotenv": "^16.0.3",
+    "typescript": "^4.8.4"
+  }
+}
