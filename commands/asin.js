@@ -15,6 +15,11 @@ exports.default = {
         .setRequired(true))),
     handler: async (interaction) => {
         await interaction.deferReply();
+        const asin = interaction.options.get("asin")?.value?.toString().trim();
+        if (!asin || asin.length !== 10) {
+            await interaction.editReply("Invalid ASIN.");
+            return;
+        }
         const result = await (new nightmare_1.default()
             .useragent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36")
             .goto(`https://www.amazon.com/dp/${interaction.options.get("asin")?.value?.toString().trim()}`)
