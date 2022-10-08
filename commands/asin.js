@@ -26,23 +26,33 @@ exports.default = {
             await interaction.editReply("Invalid ASIN.");
             return;
         }
-        const result = await (new nightmare_1.default({ show: true })
+        const result = await (new nightmare_1.default()
             .useragent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36")
             .goto(`https://www.amazon.com/dp/${interaction.options.get("asin")?.value?.toString().trim()}`)
             .wait("body")
             .evaluate(() => window.document.body.innerHTML)
             .end());
-        const document = new jsdom_1.JSDOM(result).window.document.body;
+        const document = new jsdom_1.JSDOM(result).window.document;
         const data = {};
+        let error = false;
         for (const key in queries) {
             const element = document.querySelector(queries[key]);
             if (element) {
                 data[key] = element.textContent?.trim() || element.getAttribute("src") || "";
             }
+            else {
+                error = true;
+                break;
+            }
+        }
+        if (error) {
+            await interaction.editReply("Failed to fetch product data.");
+            return;
         }
         await interaction.editReply({
             embeds: [
                 {
+                    color: 0x0080ff,
                     title: data.Title,
                     url: `https://www.amazon.com/dp/${asin}`,
                     description: data.Price,
