@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/daniel-cardone/asin-bot#readme",
   "dependencies": {
+    "axios": "^1.1.2",
     "discord.js": "^14.5.0",
     "dotenv": "^16.0.3",
     "jsdom": "^20.0.1",

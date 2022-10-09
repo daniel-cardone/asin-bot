@@ -1,4 +1,5 @@
 import {
+  AttachmentBuilder,
   ChatInputCommandInteraction,
   MessageContextMenuCommandInteraction,
   SlashCommandBuilder,
@@ -6,12 +7,22 @@ import {
 } from "discord.js";
 import Nightmare from "nightmare";
 import { JSDOM } from "jsdom";
+import axios from "axios";
+import { writeFileSync } from "fs";
+import dotenv from "dotenv";
+dotenv.config();
 
 interface AmazonProduct {
   Title: string;
   Price: string;
   Image: string;
   [key: string]: string;
+}
+
+const KEEPA_KEY = process.env.KEEPA!;
+
+function keepaUrl(route: string, asin: string) {
+  return `https://api.keepa.com/${route}?key=${KEEPA_KEY}&domain=com&asin=${asin}`;
 }
 
 const queries: AmazonProduct = {
@@ -33,6 +44,9 @@ export default {
       )
   ),
   handler: async (interaction: ChatInputCommandInteraction | MessageContextMenuCommandInteraction | UserContextMenuCommandInteraction) => {
+    let error = false;
+    let attachments = [];
+    let images = [];
     await interaction.deferReply();
 
     const asin = interaction.options.get("asin")?.value?.toString().trim();
@@ -48,35 +62,56 @@ export default {
         .wait("body")
         .evaluate(() => window.document.body.innerHTML)
         .end()
+        .then(res => res)
+        .catch(() => error = true)
     ) as string;
 
-    const document = new JSDOM(result).window.document;
     const data: { [key: string]: string } = {};
-    let error = false;
-    for (const key in queries) {
-      const element = document.querySelector(queries[key]);
-      if (element) {
-        data[key] = element.textContent?.trim() || element.getAttribute("src") || "";
-      } else {
-        error = true;
-        break;
+    if (!error) {
+      const document = new JSDOM(result).window.document;
+      for (const key in queries) {
+        const element = document.querySelector(queries[key]);
+        if (element) {
+          data[key] = element.textContent?.trim() || element.getAttribute("src") || "";
+        } else {
+          error = true;
+          break;
+        }
       }
+
+      //if (data.Image) images.push(data.Image);
+    }
+
+    if (!error) {
+      const keepaGraph = (await axios.get(keepaUrl("graphimage", asin))).data;
+      const graphBuffer = Buffer.from(keepaGraph, "binary");
+      attachments.push({ name: "keepagraph.png", attachment: graphBuffer, description: "" });
+      images.push("attachment://keepagraph.png");
+      for (let type of ['ascii', 'utf8', 'utf-8', 'utf16le', 'ucs2', 'ucs-2', 'base64', 'base64url', 'latin1', 'binary', 'hex']) {
+        writeFileSync(`debug/keepagraph=${type}.png`, Buffer.from(keepaGraph, type as BufferEncoding));
+      }
+      writeFileSync("debug/keepagraph.png", keepaGraph)
     }
     
-    if (error) {
+    if (error || Object.keys(data).length === 0) {
       await interaction.editReply("Failed to fetch product data.");
       return;
     }
     
+    const embedURL = `https://www.amazon.com/dp/${asin}`;
     await interaction.editReply({
+      files: attachments,
       embeds: [
         {
           color: 0x0080ff,
           title: data.Title,
-          url: `https://www.amazon.com/dp/${asin}`,
+          url: embedURL,
           description: data.Price,
-          image: { url: data.Image },
+          image: {
+            url: "attachment://keepagraph.png"
+          }
         },
+        // ...images.map(img => ({ url: embedURL, image: { url: img } }))
       ],
     });
   }

@@ -6,6 +6,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const discord_js_1 = require("discord.js");
 const nightmare_1 = __importDefault(require("nightmare"));
 const jsdom_1 = require("jsdom");
+const axios_1 = __importDefault(require("axios"));
+const fs_1 = require("fs");
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
+const KEEPA_KEY = process.env.KEEPA;
+function keepaUrl(route, asin) {
+    return `https://api.keepa.com/${route}?key=${KEEPA_KEY}&domain=com&asin=${asin}`;
+}
 const queries = {
     Title: "#productTitle",
     Price: ".a-offscreen",
@@ -20,6 +28,9 @@ exports.default = {
         .setDescription("The ASIN of the product")
         .setRequired(true))),
     handler: async (interaction) => {
+        let error = false;
+        let attachments = [];
+        let images = [];
         await interaction.deferReply();
         const asin = interaction.options.get("asin")?.value?.toString().trim();
         if (!asin || asin.length !== 10) {
@@ -31,33 +42,52 @@ exports.default = {
             .goto(`https://www.amazon.com/dp/${interaction.options.get("asin")?.value?.toString().trim()}`)
             .wait("body")
             .evaluate(() => window.document.body.innerHTML)
-            .end());
-        const document = new jsdom_1.JSDOM(result).window.document;
+            .end()
+            .then(res => res)
+            .catch(() => error = true));
         const data = {};
-        let error = false;
-        for (const key in queries) {
-            const element = document.querySelector(queries[key]);
-            if (element) {
-                data[key] = element.textContent?.trim() || element.getAttribute("src") || "";
+        if (!error) {
+            const document = new jsdom_1.JSDOM(result).window.document;
+            for (const key in queries) {
+                const element = document.querySelector(queries[key]);
+                if (element) {
+                    data[key] = element.textContent?.trim() || element.getAttribute("src") || "";
+                }
+                else {
+                    error = true;
+                    break;
+                }
             }
-            else {
-                error = true;
-                break;
-            }
+            //if (data.Image) images.push(data.Image);
         }
-        if (error) {
+        if (!error) {
+            const keepaGraph = (await axios_1.default.get(keepaUrl("graphimage", asin))).data;
+            const graphBuffer = Buffer.from(keepaGraph, "binary");
+            attachments.push({ name: "keepagraph.png", attachment: graphBuffer, description: "" });
+            images.push("attachment://keepagraph.png");
+            for (let type of ['ascii', 'utf8', 'utf-8', 'utf16le', 'ucs2', 'ucs-2', 'base64', 'base64url', 'latin1', 'binary', 'hex']) {
+                (0, fs_1.writeFileSync)(`debug/keepagraph=${type}.png`, Buffer.from(keepaGraph, type));
+            }
+            (0, fs_1.writeFileSync)("debug/keepagraph.png", keepaGraph);
+        }
+        if (error || Object.keys(data).length === 0) {
             await interaction.editReply("Failed to fetch product data.");
             return;
         }
+        const embedURL = `https://www.amazon.com/dp/${asin}`;
         await interaction.editReply({
+            files: attachments,
             embeds: [
                 {
                     color: 0x0080ff,
                     title: data.Title,
-                    url: `https://www.amazon.com/dp/${asin}`,
+                    url: embedURL,
                     description: data.Price,
-                    image: { url: data.Image },
+                    image: {
+                        url: "attachment://keepagraph.png"
+                    }
                 },
+                // ...images.map(img => ({ url: embedURL, image: { url: img } }))
             ],
         });
     }
