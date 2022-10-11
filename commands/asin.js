@@ -7,12 +7,11 @@ const discord_js_1 = require("discord.js");
 const nightmare_1 = __importDefault(require("nightmare"));
 const jsdom_1 = require("jsdom");
 const axios_1 = __importDefault(require("axios"));
-const fs_1 = require("fs");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const KEEPA_KEY = process.env.KEEPA;
 function keepaUrl(route, asin) {
-    return `https://api.keepa.com/${route}?key=${KEEPA_KEY}&domain=com&asin=${asin}`;
+    return `https://api.keepa.com/${route}?key=${KEEPA_KEY}&domain=1&asin=${asin}`;
 }
 const queries = {
     Title: "#productTitle",
@@ -45,7 +44,7 @@ exports.default = {
             .end()
             .then(res => res)
             .catch(() => error = true));
-        const data = {};
+        const data = { fields: [] };
         if (!error) {
             const document = new jsdom_1.JSDOM(result).window.document;
             for (const key in queries) {
@@ -58,17 +57,44 @@ exports.default = {
                     break;
                 }
             }
-            //if (data.Image) images.push(data.Image);
+            if (data.Image)
+                images.push(data.Image);
         }
+        // if (!error) {
+        //   const keepaGraph = (await axios.get(keepaUrl("graphimage", asin))).data;
+        //   const graphBuffer = Buffer.from(keepaGraph, "binary");
+        //   attachments.push({ name: "keepagraph.png", attachment: graphBuffer, description: "" });
+        //   images.push("attachment://keepagraph.png");
+        //   for (let type of ['ascii', 'utf8', 'utf-8', 'utf16le', 'ucs2', 'ucs-2', 'base64', 'base64url', 'latin1', 'binary', 'hex']) {
+        //     writeFileSync(`debug/keepagraph=${type}.png`, Buffer.from(keepaGraph, type as BufferEncoding));
+        //   }
+        //   writeFileSync("debug/keepagraph.png", keepaGraph)
+        // }
         if (!error) {
-            const keepaGraph = (await axios_1.default.get(keepaUrl("graphimage", asin))).data;
-            const graphBuffer = Buffer.from(keepaGraph, "binary");
-            attachments.push({ name: "keepagraph.png", attachment: graphBuffer, description: "" });
-            images.push("attachment://keepagraph.png");
-            for (let type of ['ascii', 'utf8', 'utf-8', 'utf16le', 'ucs2', 'ucs-2', 'base64', 'base64url', 'latin1', 'binary', 'hex']) {
-                (0, fs_1.writeFileSync)(`debug/keepagraph=${type}.png`, Buffer.from(keepaGraph, type));
+            const keepaProduct = (await axios_1.default.get(keepaUrl("product", asin))).data.products[0];
+            let availability = "No offer exists.";
+            switch (keepaProduct.availabilityAmazon) {
+                case 0:
+                    availability = "In Stock and shippable";
+                    break;
+                case 1:
+                    availability = "Not in stock, but will be in the future. (Pre-order)";
+                    break;
+                case 2:
+                    availability = "Unknown";
+                    break;
+                case 3:
+                    availability = "Not in stock, but will be in the future. (Back-order)";
+                    break;
+                case 4:
+                    availability = "Amazon shipping is delayed";
+                    break;
             }
-            (0, fs_1.writeFileSync)("debug/keepagraph.png", keepaGraph);
+            console.log(keepaProduct.salesRanks);
+            data.fields.push({
+                name: "Availability",
+                value: availability
+            });
         }
         if (error || Object.keys(data).length === 0) {
             await interaction.editReply("Failed to fetch product data.");
@@ -83,11 +109,9 @@ exports.default = {
                     title: data.Title,
                     url: embedURL,
                     description: data.Price,
-                    image: {
-                        url: "attachment://keepagraph.png"
-                    }
+                    fields: data.fields,
                 },
-                // ...images.map(img => ({ url: embedURL, image: { url: img } }))
+                ...images.map(img => ({ url: embedURL, image: { url: img } }))
             ],
         });
     }
